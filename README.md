@@ -1,4 +1,4 @@
-A little bit outdated. I am going to update as soon as possible (togheter with example). However I keep tests up to date, so you can find some inspiration there
+A little bit outdated. I am going to update as soon as possible (togheter with examples). However I keep tests up to date, so you can find some inspiration there
 
 # P2P Data Synchronization Server
 
