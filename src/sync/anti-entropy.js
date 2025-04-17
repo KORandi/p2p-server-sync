@@ -11,6 +11,14 @@ class AntiEntropy {
   constructor(syncManager) {
     this.syncManager = syncManager;
     this.lastFullSync = 0;
+
+    // New: Add flag to track if anti-entropy process is running
+    this.isRunning = false;
+
+    // New: Add request tracking for backoff
+    this.consecutiveRuns = 0;
+    this.lastRunTime = 0;
+    this.backoffTime = 1000; // Start with 1s backoff
   }
 
   /**
@@ -18,22 +26,66 @@ class AntiEntropy {
    * @param {string} path - Data path or prefix
    * @returns {Promise<void>}
    */
-  async run(path = "") {
+  async run(path = "", force = false, isScheduled = false) {
     const syncManager = this.syncManager;
     const server = syncManager.server;
 
+    // Skip if shutting down
     if (syncManager.isShuttingDown) {
       console.log("Skipping anti-entropy synchronization during shutdown");
       return;
     }
 
-    console.log("Starting anti-entropy synchronization");
+    // Skip if another process is already running and not forced
+    if (this.isRunning && !force) {
+      console.log("Anti-entropy process already running, skipping this cycle");
+
+      // Increment consecutive skips for potential notification
+      this.consecutiveRuns++;
+
+      if (this.consecutiveRuns > 5 && isScheduled) {
+        console.warn(
+          `Anti-entropy has been skipped ${this.consecutiveRuns} consecutive times. Consider increasing the interval.`
+        );
+      }
+
+      return;
+    }
+
+    // Apply backoff if runs are too frequent
+    const now = Date.now();
+    const timeSinceLastRun = now - this.lastRunTime;
+
+    if (timeSinceLastRun < this.backoffTime && !force) {
+      console.log(
+        `Anti-entropy running too frequently, applying backoff (${this.backoffTime}ms)`
+      );
+      return;
+    }
+
+    // Mark as running
+    this.isRunning = true;
+    this.lastRunTime = now;
+
+    // Reset consecutive runs counter
+    this.consecutiveRuns = 0;
+
+    // Adjust backoff based on success/failure pattern
+    if (timeSinceLastRun > this.backoffTime * 5) {
+      // If it's been a while since last run, reduce backoff
+      this.backoffTime = Math.max(1000, this.backoffTime / 2);
+    }
+
+    console.log(
+      `Starting anti-entropy synchronization for path: ${path || "all"}`
+    );
 
     try {
       // Get list of peers
       const peers = Object.keys(server.socketManager.sockets);
       if (peers.length === 0) {
         console.log("No peers connected, skipping anti-entropy");
+        this.isRunning = false;
         return;
       }
 
@@ -48,7 +100,9 @@ class AntiEntropy {
         }
       }
 
-      console.log(`Running anti-entropy with ${selectedPeers.length} peers`);
+      console.log(
+        `Running anti-entropy with ${selectedPeers.length} peers for path: ${path || "all"}`
+      );
 
       // Create a batch ID for this anti-entropy run
       const batchId = `anti-entropy-${server.serverID}-${Date.now()}`;
@@ -62,9 +116,18 @@ class AntiEntropy {
       // Run final vector clock sync
       await this.synchronizeVectorClocks();
 
-      console.log("Anti-entropy synchronization completed");
+      console.log("Anti-entropy synchronization completed successfully");
+
+      // On success, reduce backoff time
+      this.backoffTime = Math.max(1000, this.backoffTime * 0.8);
     } catch (error) {
       console.error("Error during anti-entropy synchronization:", error);
+
+      // On error, increase backoff time
+      this.backoffTime = Math.min(30000, this.backoffTime * 2);
+    } finally {
+      // Always mark as no longer running
+      this.isRunning = false;
     }
   }
 
@@ -134,28 +197,32 @@ class AntiEntropy {
         vectorClock: syncManager.vectorClock.toJSON(),
         timestamp: Date.now(),
         path: path,
+        isAntiEntropy: true, // Mark as anti-entropy message for rate limit exemption
       };
 
       // Send the data request to the peer
-      console.log(`Requesting data from peer ${peer}`);
+      console.log(
+        `Requesting data from peer ${peer} for path: ${path || "all"}`
+      );
       socket.emit("anti-entropy-request", requestData);
     }
   }
 
   /**
-   * Synchronize vector clocks across nodes
+   * Synchronize vector clocks across nodes with enhanced controls
+   * @param {boolean} [force=false] - Force synchronization even if recent
    * @returns {Promise<void>}
    */
-  async synchronizeVectorClocks() {
+  async synchronizeVectorClocks(force = false) {
     const syncManager = this.syncManager;
     const server = syncManager.server;
 
     // Skip if shutting down
     if (syncManager.isShuttingDown) return;
 
-    // Don't run too frequently
+    // Don't run too frequently unless forced
     const now = Date.now();
-    if (now - this.lastFullSync < 1000) return;
+    if (!force && now - this.lastFullSync < 1000) return;
     this.lastFullSync = now;
 
     try {
@@ -172,6 +239,7 @@ class AntiEntropy {
         syncId: `${server.serverID}-${now}-${Math.random()
           .toString(36)
           .substring(2, 9)}`,
+        isAntiEntropy: true, // Mark as anti-entropy message to exempt from rate limiting
       };
 
       // Send to all connected peers
@@ -193,6 +261,10 @@ class AntiEntropy {
           syncManager.vectorClock.clock[nodeId] = 0;
         }
       }
+
+      if (syncCount > 0 && server.debugMode) {
+        console.log(`Synchronized vector clocks with ${syncCount} peers`);
+      }
     } catch (error) {
       console.error("Error synchronizing vector clocks:", error);
     }
@@ -212,6 +284,41 @@ class AntiEntropy {
       console.error("Error getting changes for anti-entropy:", error);
       return [];
     }
+  }
+
+  /**
+   * Synchronize vector clocks with peers
+   * @private
+   * @param {Array<string>} peers - Peer IDs
+   * @param {string} batchId - Unique batch ID
+   * @returns {Promise<void>}
+   */
+  async _syncVectorClocksWithPeers(peers, batchId) {
+    const syncManager = this.syncManager;
+    const server = syncManager.server;
+
+    for (const peer of peers) {
+      const socket = server.socketManager.sockets[peer];
+
+      if (!socket || !socket.connected) continue;
+
+      // Send vector clock synchronization message
+      const syncMessage = {
+        type: "vector-clock-sync",
+        vectorClock: syncManager.vectorClock.toJSON(),
+        nodeId: server.serverID,
+        timestamp: Date.now(),
+        syncId: `${batchId}-clock-${Math.random()
+          .toString(36)
+          .substring(2, 9)}`,
+        isAntiEntropy: true, // Mark as anti-entropy message to exempt from rate limiting
+      };
+
+      socket.emit("vector-clock-sync", syncMessage);
+    }
+
+    // Wait for vector clock exchanges to process
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   /**
@@ -237,7 +344,9 @@ class AntiEntropy {
 
       const path = data.path || "";
 
-      console.log(`Received anti-entropy request from ${data.nodeId}`);
+      console.log(
+        `Received anti-entropy request from ${data.nodeId} for path: ${path || "all"}`
+      );
 
       // Add the requesting node to known nodes
       syncManager.knownNodeIds.add(data.nodeId);
@@ -277,6 +386,7 @@ class AntiEntropy {
           batchIndex: batchIndex,
           totalBatches: batchCount,
           changes: batchChanges,
+          isAntiEntropy: true, // Mark as anti-entropy message for rate limit exemption
         };
 
         // Send the response batch
@@ -361,7 +471,7 @@ class AntiEntropy {
   }
 
   /**
-   * Handle incoming vector clock synchronization
+   * Handle incoming vector clock synchronization with rate limit exemption
    * @param {Object} data - Sync message data
    * @param {Object} socket - Socket.IO socket
    * @returns {Promise<void>}
@@ -404,6 +514,7 @@ class AntiEntropy {
         nodeId: syncManager.server.serverID,
         timestamp: Date.now(),
         inResponseTo: data.syncId,
+        isAntiEntropy: true, // Mark as anti-entropy message to exempt from rate limiting
       };
 
       if (socket && socket.connected) {

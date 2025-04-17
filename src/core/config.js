@@ -12,9 +12,36 @@ function getDefaultConfig() {
   return {
     // Server config
     port: 3000,
+    host: "localhost", // Default to localhost
     dbPath: "./db",
     peers: [],
     serverID: randomBytes(8).toString("hex"),
+
+    // Rate limiting configuration (new)
+    rateLimit: {
+      enabled: true,
+      maxRequests: 100, // Maximum requests per window
+      windowMs: 60000, // Window size in milliseconds (1 minute)
+      ipWhitelist: ["127.0.0.1", "::1"], // IPs exempt from rate limiting
+    },
+
+    // Internal security configuration (new)
+    internalSecurity: {
+      enabled: true,
+      allowedPeers: [], // Empty array = all peers allowed (specify for whitelist)
+      allowedIPs: ["127.0.0.1", "::1", "localhost"], // Allowed IP addresses
+      challengeResponse: true, // Use challenge-response authentication
+    },
+
+    // Security configuration (existing)
+    security: {
+      enabled: true,
+      masterKey: null, // Must be provided if enabled
+      algorithm: "aes-256-gcm",
+      kdfAlgorithm: "pbkdf2",
+      kdfIterations: 10000,
+      keyLength: 32, // 256 bits
+    },
 
     // Sync configuration
     sync: {
@@ -30,30 +57,16 @@ function getDefaultConfig() {
       customResolvers: {},
     },
 
-    // Security configuration
-    security: {
-      enabled: true, // CHANGED: Security enabled by default
-      masterKey: null, // Must be provided if enabled
-      algorithm: "aes-256-gcm",
-      kdfAlgorithm: "pbkdf2",
-      kdfIterations: 10000,
-      keyLength: 32, // 256 bits
-    },
-
     // WebRTC configuration
     webrtc: {
-      enabled: false, // WebRTC is disabled by default
+      enabled: false, // WebRTC is disabled by default for internal networks
       stunServers: [
-        // Default STUN servers from Google
         "stun:stun.l.google.com:19302",
         "stun:stun1.l.google.com:19302",
-        "stun:stun2.l.google.com:19302",
-        "stun:stun3.l.google.com:19302",
-        "stun:stun4.l.google.com:19302",
       ],
-      signalingServer: null, // Signaling server for NAT traversal (null = no signaling server)
-      iceTransportPolicy: "all", // 'all' or 'relay'
-      reconnectDelay: 5000, // Delay between reconnection attempts in ms
+      signalingServer: null,
+      iceTransportPolicy: "all",
+      reconnectDelay: 5000,
     },
   };
 }
@@ -98,6 +111,83 @@ function validateConfig(config) {
       } catch (error) {
         throw new Error(`Invalid peer URL format: ${peer}. ${error.message}`);
       }
+    }
+  }
+
+  // Validate rate limiting config if provided
+  if (config.rateLimit) {
+    if (
+      config.rateLimit.enabled !== undefined &&
+      typeof config.rateLimit.enabled !== "boolean"
+    ) {
+      throw new Error(
+        `Invalid rateLimit.enabled: ${config.rateLimit.enabled}. Must be a boolean.`
+      );
+    }
+
+    if (
+      config.rateLimit.maxRequests !== undefined &&
+      (!Number.isInteger(config.rateLimit.maxRequests) ||
+        config.rateLimit.maxRequests < 1)
+    ) {
+      throw new Error(
+        `Invalid rateLimit.maxRequests: ${config.rateLimit.maxRequests}. Must be a positive integer.`
+      );
+    }
+
+    if (
+      config.rateLimit.windowMs !== undefined &&
+      (!Number.isInteger(config.rateLimit.windowMs) ||
+        config.rateLimit.windowMs < 1000)
+    ) {
+      throw new Error(
+        `Invalid rateLimit.windowMs: ${config.rateLimit.windowMs}. Must be at least 1000ms.`
+      );
+    }
+
+    if (config.rateLimit.ipWhitelist !== undefined) {
+      if (!Array.isArray(config.rateLimit.ipWhitelist)) {
+        throw new Error(
+          `Invalid rateLimit.ipWhitelist: Must be an array of IP addresses.`
+        );
+      }
+    }
+  }
+
+  // Validate internal security config if provided
+  if (config.internalSecurity) {
+    if (
+      config.internalSecurity.enabled !== undefined &&
+      typeof config.internalSecurity.enabled !== "boolean"
+    ) {
+      throw new Error(
+        `Invalid internalSecurity.enabled: ${config.internalSecurity.enabled}. Must be a boolean.`
+      );
+    }
+
+    if (config.internalSecurity.allowedPeers !== undefined) {
+      if (!Array.isArray(config.internalSecurity.allowedPeers)) {
+        throw new Error(
+          `Invalid internalSecurity.allowedPeers: Must be an array of peer IDs.`
+        );
+      }
+    }
+
+    if (config.internalSecurity.allowedIPs !== undefined) {
+      if (!Array.isArray(config.internalSecurity.allowedIPs)) {
+        throw new Error(
+          `Invalid internalSecurity.allowedIPs: Must be an array of IP addresses.`
+        );
+      }
+    }
+
+    if (
+      config.internalSecurity.challengeResponse !== undefined &&
+      typeof config.internalSecurity.challengeResponse !== "boolean"
+    ) {
+      throw new Error(
+        `Invalid internalSecurity.challengeResponse: ${config.internalSecurity.challengeResponse}. Must be a boolean.`
+      );
     }
   }
 

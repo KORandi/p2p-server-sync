@@ -4,7 +4,7 @@
  */
 
 /**
- * Set up socket message handlers
+ * Set up socket message handlers with rate limit exemption for anti-entropy
  * @param {Object} socket - Socket.IO socket instance
  * @param {Object} server - P2PServer instance
  * @param {boolean} [isIncoming=true] - Whether this is an incoming connection
@@ -12,11 +12,57 @@
 function setupMessageHandlers(socket, server, isIncoming = true) {
   const connectionType = isIncoming ? "incoming" : "outgoing";
 
+  // Get the client IP for rate limiting
+  const clientIp = socket.handshake ? socket.handshake.address : null;
+  const socketId = socket.id;
+
+  // Client identifier for rate limiting
+  const clientId = clientIp || socketId;
+
+  // Track message counts by type for rate limiting
+  const messageCount = {
+    total: 0,
+    lastResetTime: Date.now(),
+  };
+
+  // Helper function to check rate limits with exemptions
+  function checkRateLimit(eventName, data) {
+    // Skip rate limiting if it's not enabled
+    if (!server.socketManager.rateLimiter) {
+      return false; // Not limited
+    }
+
+    // Exempt anti-entropy messages from rate limiting
+    if (data && data.isAntiEntropy === true) {
+      return false; // Not limited
+    }
+
+    // Reset counters hourly
+    const now = Date.now();
+    if (now - messageCount.lastResetTime > 3600000) {
+      // 1 hour
+      messageCount.total = 0;
+      messageCount.lastResetTime = now;
+    }
+
+    // Track message count
+    messageCount.total++;
+
+    // Check rate limits
+    return server.socketManager.rateLimiter.shouldLimit(clientId);
+  }
+
   // Handle 'put' messages (data updates)
   socket.on("put", (data) => {
     // Ignore if shutting down
     if (server.isShuttingDown) {
       console.log("Ignoring put message during shutdown");
+      return;
+    }
+
+    // Check rate limits (with exemption for anti-entropy)
+    if (checkRateLimit("put", data)) {
+      console.warn(`Rate limit exceeded for ${clientId}, dropping put message`);
       return;
     }
 
@@ -77,6 +123,17 @@ function setupMessageHandlers(socket, server, isIncoming = true) {
   socket.on("vector-clock-sync", (data) => {
     if (server.isShuttingDown) return;
 
+    // Anti-entropy messages are exempt from rate limiting
+    const isAntiEntropy = data && data.isAntiEntropy === true;
+
+    // Check rate limits (with exemption for anti-entropy)
+    if (!isAntiEntropy && checkRateLimit("vector-clock-sync", data)) {
+      console.warn(
+        `Rate limit exceeded for ${clientId}, dropping vector-clock-sync message`
+      );
+      return;
+    }
+
     try {
       // Decrypt the data if it's encrypted
       let decryptedData;
@@ -102,41 +159,12 @@ function setupMessageHandlers(socket, server, isIncoming = true) {
     }
   });
 
-  // Handle vector clock synchronization responses
-  socket.on("vector-clock-sync-response", (data) => {
-    if (server.isShuttingDown) return;
-
-    try {
-      // Decrypt the data if it's encrypted
-      let decryptedData;
-      if (data.encrypted) {
-        if (server.securityEnabled && server.securityManager) {
-          decryptedData = server.decryptData(data);
-        } else {
-          console.warn(
-            "Received encrypted vector-clock-sync-response but security is disabled"
-          );
-          return;
-        }
-      } else {
-        decryptedData = data;
-      }
-
-      // Process via sync manager
-      if (server.syncManager) {
-        server.syncManager.handleVectorClockSyncResponse(decryptedData);
-      }
-    } catch (error) {
-      console.error(
-        "Error processing vector-clock-sync-response message:",
-        error
-      );
-    }
-  });
-
   // Handle anti-entropy data requests (pull-based approach)
   socket.on("anti-entropy-request", (data) => {
     if (server.isShuttingDown) return;
+
+    // Anti-entropy messages are exempt from rate limiting
+    // No need to check rate limits here as these are always exempt
 
     try {
       // Decrypt the data if it's encrypted
@@ -154,6 +182,9 @@ function setupMessageHandlers(socket, server, isIncoming = true) {
         decryptedData = data;
       }
 
+      // Always set isAntiEntropy flag to ensure exemption
+      decryptedData.isAntiEntropy = true;
+
       // Process via sync manager
       if (server.syncManager) {
         server.syncManager.handleAntiEntropyRequest(decryptedData, socket);
@@ -163,9 +194,11 @@ function setupMessageHandlers(socket, server, isIncoming = true) {
     }
   });
 
-  // Handle anti-entropy data responses
+  // Handle anti-entropy data responses (also exempt from rate limiting)
   socket.on("anti-entropy-response", (data) => {
     if (server.isShuttingDown) return;
+
+    // No need to check rate limits for anti-entropy messages
 
     try {
       // Decrypt the data if it's encrypted
@@ -182,6 +215,9 @@ function setupMessageHandlers(socket, server, isIncoming = true) {
       } else {
         decryptedData = data;
       }
+
+      // Always set isAntiEntropy flag to ensure exemption
+      decryptedData.isAntiEntropy = true;
 
       // Process via sync manager
       if (server.syncManager) {

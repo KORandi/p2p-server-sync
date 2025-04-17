@@ -61,7 +61,8 @@ class SyncManager {
     ) {
       this.antiEntropyInterval = setInterval(() => {
         if (!this.isShuttingDown) {
-          this.runAntiEntropy().catch((err) =>
+          // Pass isScheduled=true to indicate this is a scheduled run
+          this.runAntiEntropy(null, false, true).catch((err) =>
             console.error("Anti-entropy error:", err)
           );
         }
@@ -106,7 +107,7 @@ class SyncManager {
   }
 
   /**
-   * Handle PUT operations with conflict resolution using vector clocks only
+   * Handle PUT operations with correct anti-entropy handling
    * @param {Object} data - Data object with path, value, vectorClock, etc.
    * @returns {Promise<Object>} - Processed data
    */
@@ -457,27 +458,30 @@ class SyncManager {
   }
 
   /**
-   * Run anti-entropy synchronization
-   * @param {string} path - Data path or prefix
+   * Run anti-entropy synchronization with enhanced control
+   * @param {string} [path=""] - Data path or prefix
+   * @param {boolean} [force=false] - Force run even if another process is running
+   * @param {boolean} [isScheduled=false] - Whether this is a scheduled run
    * @returns {Promise<void>}
    */
-  async runAntiEntropy(path = "") {
+  async runAntiEntropy(path = "", force = false, isScheduled = false) {
     if (this.isShuttingDown) {
       console.log("Skipping anti-entropy synchronization during shutdown");
       return;
     }
 
-    return this.antiEntropy.run(path);
+    return this.antiEntropy.run(path, force, isScheduled);
   }
 
   /**
    * Synchronize vector clocks with peers
+   * @param {boolean} [force=false] - Force synchronization even if recent
    * @returns {Promise<void>}
    */
-  async synchronizeVectorClocks() {
+  async synchronizeVectorClocks(force = false) {
     if (this.isShuttingDown) return;
 
-    return this.antiEntropy.synchronizeVectorClocks();
+    return this.antiEntropy.synchronizeVectorClocks(force);
   }
 
   /**

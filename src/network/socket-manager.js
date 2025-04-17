@@ -6,6 +6,7 @@
 const socketIO = require("socket.io");
 const { io: ioClient } = require("socket.io-client");
 const { setupMessageHandlers } = require("./message-handlers");
+const { PeerAuthenticator, RateLimiter } = require("../utils/peer-auth");
 
 class SocketManager {
   /**
@@ -24,6 +25,27 @@ class SocketManager {
     this.isShuttingDown = false;
     this.peerSockets = []; // Store client socket connections
     this.webrtcEnabled = server.webrtcEnabled || false;
+
+    // Create rate limiter instance
+    this.rateLimiter = new RateLimiter({
+      maxRequests: server.config?.rateLimit?.maxRequests || 100,
+      windowMs: server.config?.rateLimit?.windowMs || 60000,
+    });
+
+    // Create peer authenticator if security is enabled
+    if (server.securityEnabled && server.securityManager) {
+      this.peerAuthenticator = new PeerAuthenticator(
+        {
+          allowedPeers: server.config?.security?.allowedPeers || [],
+          allowedIPs: server.config?.security?.allowedIPs || [
+            "127.0.0.1",
+            "::1",
+            "localhost",
+          ],
+        },
+        server.securityManager
+      );
+    }
   }
 
   /**
@@ -32,7 +54,14 @@ class SocketManager {
    */
   init(httpServer) {
     this.io = socketIO(httpServer);
-    this.myUrl = `http://localhost:${this.server.port}`;
+
+    // Determine our protocol (localhost doesn't need https)
+    const isLocalhost =
+      this.server.port === "localhost" ||
+      this.server.host === "127.0.0.1" ||
+      this.server.host === "::1";
+
+    this.myUrl = `http://${this.server.host || "localhost"}:${this.server.port}`;
 
     this.io.on("connection", (socket) => {
       // Don't accept new connections if shutting down
@@ -42,11 +71,44 @@ class SocketManager {
         return;
       }
 
-      console.log(`New connection from: ${socket.id}`);
+      // Get the client's IP address
+      const clientIp = socket.handshake.address;
+      console.log(`New connection from IP ${clientIp}: ${socket.id}`);
+
+      // Track connection attempt for rate limiting
+      const connectionId = clientIp || socket.id;
+
+      // Apply rate limiting if enabled
+      if (this.rateLimiter && this.rateLimiter.shouldLimit(connectionId)) {
+        console.warn(`Rate limit exceeded for ${connectionId}, disconnecting`);
+        socket.disconnect(true);
+        return;
+      }
 
       socket.on("identify", (data) => {
         const peerId = data.serverID;
         const peerUrl = data.url;
+
+        // Authenticate peer if authenticator is enabled
+        if (this.peerAuthenticator) {
+          // Check if peer is allowed
+          if (!this.peerAuthenticator.isPeerAllowed(peerId, clientIp)) {
+            console.warn(
+              `Rejecting unauthorized peer ${peerId} from ${clientIp}`
+            );
+            socket.disconnect(true);
+            return;
+          }
+
+          // Generate a challenge for later authentication
+          const challenge = this.peerAuthenticator.generateChallenge(peerId);
+
+          // Send challenge to peer
+          socket.emit("auth-challenge", {
+            challenge: challenge,
+            serverId: this.server.serverID,
+          });
+        }
 
         // Store socket reference by ID
         this.sockets[peerId] = socket;
@@ -95,10 +157,32 @@ class SocketManager {
         }
       });
 
+      // Handle authentication responses
+      socket.on("auth-response", (data) => {
+        if (!this.peerAuthenticator) return;
+
+        // Verify the response
+        const isValid = this.peerAuthenticator.verifyResponse(
+          data.challengeId,
+          data.response
+        );
+
+        if (!isValid) {
+          console.warn(
+            `Invalid authentication response from ${socket.id}, disconnecting`
+          );
+          socket.disconnect(true);
+        } else {
+          console.log(
+            `Peer ${data.response.peerId} authenticated successfully`
+          );
+        }
+      });
+
       // Set up WebRTC signaling handlers
       if (this.webrtcEnabled) {
         socket.on("webrtc-signal", (data) => {
-          // Forward to webrtcManager - it will handle the signal if it's for us
+          // Forward to webrtcManager
           if (this.server.webrtcManager) {
             this.server.webrtcManager.handleSignal(
               socket,
@@ -118,7 +202,7 @@ class SocketManager {
    * Connect to known peers
    * @param {Array<string>} peerURLs - URLs of peers to connect to
    */
-  connectToPeers(peerURLs) {
+  connectToPeers(peerURLs, socketOptions = {}) {
     // Don't connect to peers if shutting down
     if (this.isShuttingDown) {
       console.log("Skipping peer connections during shutdown");
@@ -136,7 +220,9 @@ class SocketManager {
         }
 
         console.log(`Attempting to connect to peer: ${url}`);
-        const socket = ioClient(url);
+
+        // No need to enforce HTTPS for localhost/internal network
+        const socket = ioClient(url, socketOptions);
 
         // Store for cleanup
         this.peerSockets.push(socket);
@@ -151,6 +237,26 @@ class SocketManager {
           socket.emit("identify", {
             serverID: this.server.serverID,
             url: this.myUrl,
+          });
+
+          // Handle authentication challenges
+          socket.on("auth-challenge", (data) => {
+            if (!this.server.securityManager) return;
+
+            // Create a signed response
+            const challenge = data.challenge;
+            const dataToSign = `${this.server.serverID}:${challenge.nonce}:${challenge.timestamp}`;
+            const signature = this.server.securityManager.createMAC(dataToSign);
+
+            // Send response
+            socket.emit("auth-response", {
+              challengeId: challenge.id,
+              response: {
+                peerId: this.server.serverID,
+                timestamp: Date.now(),
+                signature: signature,
+              },
+            });
           });
 
           // After connecting, immediately synchronize vector clocks

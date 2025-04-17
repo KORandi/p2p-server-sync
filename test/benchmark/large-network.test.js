@@ -816,7 +816,7 @@ describe("Large P2P Network Tests", function () {
 
       // Wait for final synchronization
       console.log("Waiting for final synchronization...");
-      await wait(3000);
+      await wait(10000);
 
       // Check data consistency across all nodes
       let valueMap = new Map();
