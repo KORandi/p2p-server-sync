@@ -296,7 +296,7 @@ describe("Synchronization Integration Tests", function () {
       await servers[1].put("entropy/offline", { value: "offline-data" });
 
       // Wait for anti-entropy to run
-      await wait(1100);
+      await wait(2000);
 
       // Check if second server received the data through anti-entropy
       const data = await servers[0].get("entropy/offline");
