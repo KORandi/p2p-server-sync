@@ -314,6 +314,17 @@ class SocketManager {
       dataToSend.vectorClock = this.server.syncManager.getVectorClock();
     }
 
+    // Encrypt the data if security is enabled
+    let encryptedData = dataToSend;
+    if (this.server.securityEnabled && this.server.securityManager) {
+      try {
+        encryptedData = this.server.encryptData(dataToSend);
+      } catch (error) {
+        console.error(`Error encrypting ${event} message:`, error);
+        // Continue with unencrypted data if encryption fails
+      }
+    }
+
     // Track which peers we've sent to
     const sentToPeers = new Set();
     let peerCount = 0;
@@ -328,7 +339,9 @@ class SocketManager {
         if (sentToPeers.has(peerId)) continue;
 
         // Send via WebRTC
-        if (this.server.webrtcManager.sendToPeer(peerId, event, dataToSend)) {
+        if (
+          this.server.webrtcManager.sendToPeer(peerId, event, encryptedData)
+        ) {
           sentToPeers.add(peerId);
           peerCount++;
         }
@@ -346,7 +359,7 @@ class SocketManager {
       // Get the socket
       const socket = this.sockets[peerId];
       if (socket && socket.connected) {
-        socket.emit(event, dataToSend);
+        socket.emit(event, encryptedData);
         sentToPeers.add(peerId);
         peerCount++;
       }
@@ -363,7 +376,7 @@ class SocketManager {
       // Get the socket
       const socket = this.socketsByUrl[url];
       if (socket && socket.connected) {
-        socket.emit(event, dataToSend);
+        socket.emit(event, encryptedData);
         if (peerId) sentToPeers.add(peerId);
         peerCount++;
       }
@@ -372,7 +385,9 @@ class SocketManager {
     console.log(
       `Broadcasting ${event} for ${
         data.path || "general message"
-      } to ${peerCount} peers (${sentToPeers.size} unique)`
+      } to ${peerCount} peers (${sentToPeers.size} unique)${
+        this.server.securityEnabled ? " [ENCRYPTED]" : ""
+      }`
     );
     return peerCount;
   }

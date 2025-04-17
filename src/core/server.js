@@ -20,6 +20,9 @@ const { getDefaultConfig, validateConfig } = require("./config");
 const VectorClock = require("../sync/vector-clock");
 const deepmerge = require("deepmerge");
 
+// Import security manager
+const SecurityManager = require("../utils/security");
+
 class P2PServer {
   /**
    * Create a new P2P Server instance
@@ -36,6 +39,10 @@ class P2PServer {
     this.peers = config.peers || [];
     this.isShuttingDown = false;
 
+    // Security configuration
+    this.securityEnabled = config.security?.enabled || false;
+    this.securityConfig = config.security || {};
+
     // WebRTC configuration
     this.webrtcEnabled = config.webrtc?.enabled || false;
     this.webrtcConfig = config.webrtc || {};
@@ -47,6 +54,29 @@ class P2PServer {
 
     // Initialize core components
     this.db = new DatabaseManager(this.dbPath);
+
+    // Initialize security manager if enabled
+    if (this.securityEnabled) {
+      if (!this.securityConfig.masterKey) {
+        throw new Error("Security is enabled but no master key (PSK) provided");
+      }
+
+      try {
+        this.securityManager = new SecurityManager(this.securityConfig);
+        console.log(
+          `Security enabled with ${this.securityConfig.algorithm} encryption`
+        );
+      } catch (error) {
+        console.error("Failed to initialize security manager:", error);
+        throw new Error(`Security initialization failed: ${error.message}`);
+      }
+    } else {
+      console.log(
+        "Security is disabled - data will be transmitted in cleartext"
+      );
+    }
+
+    // Initialize socket manager (pass security manager if enabled)
     this.socketManager = new SocketManager(this);
 
     // Initialize WebRTC NAT traversal if enabled
@@ -100,6 +130,7 @@ class P2PServer {
         console.log(`Database path: ${this.dbPath}`);
         console.log(`Known peers: ${this.peers.join(", ") || "none"}`);
         console.log(`WebRTC enabled: ${this.webrtcEnabled}`);
+        console.log(`Security enabled: ${this.securityEnabled}`);
         resolve();
       });
     });
@@ -121,11 +152,16 @@ class P2PServer {
     const vectorClock = new VectorClock(currentClock);
     vectorClock.increment(this.serverID);
 
+    // Generate a secure message ID if security is enabled
+    const msgId = this.securityEnabled
+      ? this.securityManager.generateSecureId()
+      : randomBytes(16).toString("hex");
+
     // Create data object with metadata
     const data = {
       path,
       value,
-      msgId: randomBytes(16).toString("hex"),
+      msgId,
       origin: this.serverID,
       vectorClock: vectorClock.toJSON(),
     };
@@ -313,7 +349,66 @@ class P2PServer {
       webrtc: webrtcStats,
       totalPeers: new Set([...socketStats.peersById, ...webrtcStats.peers])
         .size,
+      securityEnabled: this.securityEnabled,
     };
+  }
+
+  /**
+   * Check if a peer has the necessary security configuration
+   * @param {string} peerId - Peer ID to check
+   * @returns {boolean} - Whether communication with this peer is secure
+   */
+  isPeerSecure(peerId) {
+    // Security must be enabled locally first
+    if (!this.securityEnabled) {
+      return false;
+    }
+
+    // For now, we assume all peers with the same securityConfig are secure
+    // In a more advanced implementation, this would check for key exchange confirmation
+    return true;
+  }
+
+  /**
+   * Encrypt data for network transmission
+   * @param {Object} data - Data to encrypt
+   * @returns {Object} - Encrypted data package
+   */
+  encryptData(data) {
+    if (!this.securityEnabled || !this.securityManager) {
+      return { encrypted: false, data };
+    }
+
+    try {
+      return this.securityManager.encrypt(data);
+    } catch (error) {
+      console.error("Encryption error:", error);
+      // Fallback to unencrypted if encryption fails
+      return { encrypted: false, data };
+    }
+  }
+
+  /**
+   * Decrypt received data
+   * @param {Object} encryptedData - Encrypted data package
+   * @returns {Object} - Decrypted data
+   */
+  decryptData(encryptedData) {
+    if (!encryptedData.encrypted) {
+      return encryptedData.data || encryptedData;
+    }
+
+    if (!this.securityEnabled || !this.securityManager) {
+      console.warn("Received encrypted data but security is disabled");
+      throw new Error("Cannot decrypt: security is disabled");
+    }
+
+    try {
+      return this.securityManager.decrypt(encryptedData);
+    } catch (error) {
+      console.error("Decryption error:", error);
+      throw new Error(`Failed to decrypt data: ${error.message}`);
+    }
   }
 
   /**

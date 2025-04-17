@@ -260,10 +260,33 @@ class WebRTCNATManager {
       try {
         // Parse the message
         const message = JSON.parse(data.toString());
-        const { type, ...payload } = message;
+        const { type } = message;
+
+        // Handle encrypted data if security is enabled
+        let decryptedMessage = message;
+        if (
+          message.encrypted &&
+          this.server.securityEnabled &&
+          this.server.securityManager
+        ) {
+          try {
+            decryptedMessage = this.server.decryptData(message);
+            // Keep the type from the original message
+            decryptedMessage.type = type;
+          } catch (error) {
+            console.error(
+              `Error decrypting WebRTC message from peer ${peerId}:`,
+              error
+            );
+            return; // Skip processing this message
+          }
+        }
+
+        // Extract type and payload from the decrypted message
+        const { type: msgType, ...payload } = decryptedMessage;
 
         // Handle different message types
-        switch (type) {
+        switch (msgType) {
           case "put":
             if (this.server.syncManager) {
               this.server.syncManager.handlePut(payload);
@@ -306,10 +329,68 @@ class WebRTCNATManager {
             }
             break;
 
+          case "security-handshake":
+            // Handle security handshake for WebRTC
+            if (this.server.securityEnabled && this.server.securityManager) {
+              try {
+                const challenge = payload.challenge;
+                if (!challenge) {
+                  this.sendToPeer(peerId, "security-handshake-response", {
+                    success: false,
+                    securityEnabled: true,
+                    message: "Invalid handshake challenge",
+                  });
+                  return;
+                }
+
+                // Try to decrypt the challenge
+                const decryptedChallenge = this.server.decryptData(challenge);
+
+                // Create response with MAC
+                const response = {
+                  success: true,
+                  serverID: this.server.serverID,
+                  timestamp: Date.now(),
+                  originalChallenge: decryptedChallenge,
+                };
+
+                // Sign the response with MAC
+                const mac = this.server.securityManager.createMAC(response);
+
+                // Send back the response
+                this.sendToPeer(peerId, "security-handshake-response", {
+                  ...response,
+                  mac,
+                });
+
+                console.log(
+                  `WebRTC security handshake successful with peer ${peerId}`
+                );
+              } catch (error) {
+                // Failed to decrypt - likely using a different key
+                this.sendToPeer(peerId, "security-handshake-response", {
+                  success: false,
+                  securityEnabled: true,
+                  message: "Security handshake failed: invalid master key",
+                });
+
+                console.warn(
+                  `WebRTC security handshake failed with peer ${peerId}: ${error.message}`
+                );
+              }
+            } else {
+              this.sendToPeer(peerId, "security-handshake-response", {
+                success: false,
+                securityEnabled: false,
+                message: "Security is not enabled on this server",
+              });
+            }
+            break;
+
           default:
             console.warn(
               `Unknown WebRTC message type from peer ${peerId}:`,
-              type
+              msgType
             );
         }
       } catch (error) {
@@ -473,8 +554,25 @@ class WebRTCNATManager {
         ...data,
       };
 
+      // Encrypt the message if security is enabled
+      let messageToSend = message;
+      if (this.server.securityEnabled && this.server.securityManager) {
+        try {
+          // Only encrypt if not already encrypted
+          if (!message.encrypted) {
+            messageToSend = this.server.encryptData(message);
+          }
+        } catch (error) {
+          console.error(
+            `Error encrypting WebRTC message to peer ${peerId}:`,
+            error
+          );
+          // Continue with unencrypted message if encryption fails
+        }
+      }
+
       // Send message as string
-      peerInfo.peer.send(JSON.stringify(message));
+      peerInfo.peer.send(JSON.stringify(messageToSend));
       return true;
     } catch (error) {
       console.error(`Error sending WebRTC message to peer ${peerId}:`, error);
