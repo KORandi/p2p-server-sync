@@ -132,6 +132,9 @@ describe("P2P Server Performance Benchmarks", function () {
         port: 4001,
         dbPath: `${TEST_DB_DIR}/single-node`,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       await server.start();
@@ -253,6 +256,9 @@ describe("P2P Server Performance Benchmarks", function () {
         {
           sync: {
             antiEntropyInterval: 2000, // 2 seconds
+          },
+          security: {
+            enabled: false,
           },
         }
       );
@@ -401,6 +407,9 @@ describe("P2P Server Performance Benchmarks", function () {
         port: 4001,
         dbPath: `${TEST_DB_DIR}/stress-test`,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       await server.start();

@@ -32,7 +32,7 @@ function getDefaultConfig() {
 
     // Security configuration
     security: {
-      enabled: false, // Disabled by default for backward compatibility
+      enabled: true, // CHANGED: Security enabled by default
       masterKey: null, // Must be provided if enabled
       algorithm: "aes-256-gcm",
       kdfAlgorithm: "pbkdf2",

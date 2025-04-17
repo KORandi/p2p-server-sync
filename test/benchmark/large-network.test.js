@@ -240,6 +240,9 @@ describe("Large P2P Network Tests", function () {
           sync: {
             antiEntropyInterval: 1000, // Every 1 second
           },
+          security: {
+            enabled: false,
+          },
         });
 
         servers.push(server);
@@ -327,6 +330,9 @@ describe("Large P2P Network Tests", function () {
         ),
         sync: {
           antiEntropyInterval: 2000, // More frequent for faster healing
+        },
+        security: {
+          enabled: false,
         },
       });
 
@@ -480,6 +486,9 @@ describe("Large P2P Network Tests", function () {
             pathStrategies: {
               users: "merge-fields",
             },
+          },
+          security: {
+            enabled: false,
           },
         }
       );
@@ -778,6 +787,9 @@ describe("Large P2P Network Tests", function () {
             },
             conflict: {
               defaultStrategy: "vector-dominance", // Use vector clocks
+            },
+            security: {
+              enabled: false,
             },
           });
 

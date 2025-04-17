@@ -40,12 +40,9 @@ class P2PServer {
     this.isShuttingDown = false;
 
     // Security configuration
-    this.securityEnabled = config.security?.enabled || false;
+    // Security configuration
+    this.securityEnabled = config.security?.enabled !== false; // Default to true if not explicitly disabled
     this.securityConfig = config.security || {};
-
-    // WebRTC configuration
-    this.webrtcEnabled = config.webrtc?.enabled || false;
-    this.webrtcConfig = config.webrtc || {};
 
     // Initialize Express and HTTP server
     this.app = express();
@@ -58,7 +55,11 @@ class P2PServer {
     // Initialize security manager if enabled
     if (this.securityEnabled) {
       if (!this.securityConfig.masterKey) {
-        throw new Error("Security is enabled but no master key (PSK) provided");
+        throw new Error(
+          "Security is enabled by default. Please provide a master key (PSK) " +
+            "using the security.masterKey option, or explicitly disable security " +
+            "by setting security.enabled to false."
+        );
       }
 
       try {
@@ -71,8 +72,9 @@ class P2PServer {
         throw new Error(`Security initialization failed: ${error.message}`);
       }
     } else {
-      console.log(
-        "Security is disabled - data will be transmitted in cleartext"
+      console.warn(
+        "WARNING: Security is disabled - data will be transmitted in cleartext. " +
+          "This is NOT recommended for production environments."
       );
     }
 

@@ -91,6 +91,9 @@ describe("Synchronization Integration Tests", function () {
             port,
             dbPath: `./test/temp/sync-test-db-${i + 1}`,
             peers,
+            security: {
+              enabled: false,
+            },
           })
         );
       }

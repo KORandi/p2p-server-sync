@@ -140,13 +140,16 @@ describe("Advanced P2P Server Tests", function () {
         port: 4001,
         dbPath: `${TEST_DB_DIR}/rate-limit`,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       await server.start();
     });
 
     after(async function () {
-      await server.close();
+      await server?.close();
     });
 
     it("should handle high write throughput without crashing", async function () {
@@ -222,12 +225,18 @@ describe("Advanced P2P Server Tests", function () {
         port: 4001,
         dbPath: SERVER1_DB_PATH,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       server2 = new P2PServer({
         port: 4002,
         dbPath: SERVER2_DB_PATH,
         peers: ["http://localhost:4001"],
+        security: {
+          enabled: false,
+        },
       });
 
       await server1.start();
@@ -267,12 +276,18 @@ describe("Advanced P2P Server Tests", function () {
         port: 4001,
         dbPath: SERVER1_DB_PATH,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       server2 = new P2PServer({
         port: 4002,
         dbPath: SERVER2_DB_PATH,
         peers: ["http://localhost:4001"],
+        security: {
+          enabled: false,
+        },
       });
 
       await server1.start();
@@ -314,6 +329,9 @@ describe("Advanced P2P Server Tests", function () {
         peers: [],
         sync: {
           maxVersions: 5, // Keep 5 versions in history
+        },
+        security: {
+          enabled: false,
         },
       });
 
@@ -403,6 +421,9 @@ describe("Advanced P2P Server Tests", function () {
         port: 4001,
         dbPath: `${TEST_DB_DIR}/large-data`,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       await server.start();
@@ -475,6 +496,9 @@ describe("Advanced P2P Server Tests", function () {
           port: 4001,
           dbPath: `${TEST_DB_DIR}/topology-1`,
           peers: [],
+          security: {
+            enabled: false,
+          },
         })
       );
 
@@ -483,6 +507,9 @@ describe("Advanced P2P Server Tests", function () {
           port: 4002,
           dbPath: `${TEST_DB_DIR}/topology-2`,
           peers: ["http://localhost:4001"],
+          security: {
+            enabled: false,
+          },
         })
       );
 
@@ -491,6 +518,9 @@ describe("Advanced P2P Server Tests", function () {
           port: 4003,
           dbPath: `${TEST_DB_DIR}/topology-3`,
           peers: ["http://localhost:4002"],
+          security: {
+            enabled: false,
+          },
         })
       );
 
@@ -530,6 +560,9 @@ describe("Advanced P2P Server Tests", function () {
       // Create a new server3 with different peers
       servers[2] = new P2PServer({
         port: 4003,
+        security: {
+          enabled: false,
+        },
         dbPath: `${TEST_DB_DIR}/topology-3`,
         peers: ["http://localhost:4001"], // Now connects to server1 directly
       });
@@ -564,6 +597,9 @@ describe("Advanced P2P Server Tests", function () {
         port: 4001,
         dbPath: `${TEST_DB_DIR}/scan-performance`,
         peers: [],
+        security: {
+          enabled: false,
+        },
       });
 
       await server.start();
@@ -709,6 +745,9 @@ describe("Advanced P2P Server Tests", function () {
         sync: {
           antiEntropyInterval: 2000, // Run anti-entropy more frequently for testing
         },
+        security: {
+          enabled: false,
+        },
       });
 
       // Start all servers
@@ -768,6 +807,9 @@ describe("Advanced P2P Server Tests", function () {
         peers: ["http://localhost:4001", "http://localhost:4003"],
         sync: {
           antiEntropyInterval: null, // Disable automatic anti-entropy for controlled testing
+        },
+        security: {
+          enabled: false,
         },
       });
 
@@ -840,6 +882,9 @@ describe("Advanced P2P Server Tests", function () {
         sync: {
           antiEntropyInterval: null, // Disable automatic anti-entropy for controlled testing
         },
+        security: {
+          enabled: false,
+        },
       });
 
       await servers[1].start();
@@ -911,6 +956,9 @@ describe("Advanced P2P Server Tests", function () {
           peers: ["http://localhost:4002", "http://localhost:4003"],
           sync: {
             antiEntropyInterval: null, // Disable automatic anti-entropy
+          },
+          security: {
+            enabled: false,
           },
         });
 
@@ -1113,6 +1161,9 @@ describe("Advanced P2P Server Tests", function () {
         sync: {
           antiEntropyInterval: null, // Disable automatic anti-entropy
         },
+        security: {
+          enabled: false,
+        },
       });
 
       const server2 = new P2PServer({
@@ -1121,6 +1172,9 @@ describe("Advanced P2P Server Tests", function () {
         peers: [`http://localhost:4001`],
         sync: {
           antiEntropyInterval: null, // Disable automatic anti-entropy
+        },
+        security: {
+          enabled: false,
         },
       });
 

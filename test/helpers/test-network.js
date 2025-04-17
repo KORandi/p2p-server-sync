@@ -208,6 +208,9 @@ function createTestNetwork(
       port,
       dbPath,
       peers,
+      security: {
+        enabled: false,
+      },
       ...options,
     });
 

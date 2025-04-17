@@ -31,7 +31,7 @@ console.log(`
 const server = P2PServer.createServer({
   // other config...
   security: {
-    enabled: true,
+    // Security is enabled by default - no need to set 'enabled: true'
     masterKey: "${masterKey}",
     algorithm: "aes-256-gcm",
     kdfIterations: 10000
@@ -39,9 +39,22 @@ const server = P2PServer.createServer({
 });
 `);
 
+console.log("\nIMPORTANT: Store this key securely!");
 console.log(
-  "\nIMPORTANT: Store this key securely and avoid committing it to version control."
+  "In production, use environment variables or a secure key management system:"
 );
-console.log(
-  "In production, use environment variables or a secure key management system.\n"
-);
+console.log(`
+// Store in environment variable
+export P2P_SERVER_MASTER_KEY="${masterKey}"
+
+// Use in your application
+const server = P2PServer.createServer({
+  // other config...
+  security: {
+    masterKey: process.env.P2P_SERVER_MASTER_KEY
+  }
+});
+`);
+
+console.log("\nWARNING: Do not commit this key to version control.");
+console.log("All nodes in your P2P network must use the SAME master key.\n");
