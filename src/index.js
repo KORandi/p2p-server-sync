@@ -4,7 +4,7 @@
 
 const P2PServer = require("./core/server");
 const VectorClock = require("./sync/vector-clock");
-const ConflictResolver = require("./sync/conflict-resolver");
+const ConflictResolver = require("./sync/conflict");
 const { getDefaultConfig } = require("./core/config");
 
 /**

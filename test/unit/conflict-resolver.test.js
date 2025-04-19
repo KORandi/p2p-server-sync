@@ -3,7 +3,7 @@
  */
 
 const { expect } = require("chai");
-const ConflictResolver = require("../../src/sync/conflict-resolver");
+const ConflictResolver = require("../../src/sync/conflict");
 const VectorClock = require("../../src/sync/vector-clock");
 
 describe("ConflictResolver", () => {

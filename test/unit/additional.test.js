@@ -4,8 +4,8 @@
 
 const { expect } = require("chai");
 const VectorClock = require("../../src/sync/vector-clock");
-const ConflictResolver = require("../../src/sync/conflict-resolver");
-const DatabaseManager = require("../../src/core/database-manager");
+const ConflictResolver = require("../../src/sync/conflict");
+const DatabaseManager = require("../../src/core/database");
 const {
   isValidPath,
   normalizePath,
