@@ -3,7 +3,6 @@
  * For nodes communicating on localhost or trusted internal networks
  */
 
-// Add this to src/utils/peer-auth.js
 class PeerAuthenticator {
   /**
    * Create a new PeerAuthenticator

@@ -6,7 +6,7 @@ function getDefaults() {
   return {
     // Security configuration
     security: {
-      enabled: true,
+      enabled: false,
       masterKey: null, // Must be provided if enabled
       algorithm: "aes-256-gcm",
       kdfAlgorithm: "pbkdf2",

@@ -5,10 +5,10 @@
 
 const socketIO = require("socket.io");
 const ConnectionManager = require("./connection-manager");
-const SecurityManager = require("./security-manager");
+const SecurityManager = require("../../core/security");
 const BroadcastManager = require("./broadcast-manager");
 const { setupMessageHandlers } = require("../message-handlers");
-const { PeerAuthenticator, RateLimiter } = require("../../utils/peer-auth");
+const { PeerAuthenticator, RateLimiter } = require("./peer-auth");
 
 class SocketManager {
   /**

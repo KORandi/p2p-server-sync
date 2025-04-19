@@ -17,7 +17,7 @@ class SecurityManager {
    * @param {boolean} [options.enabled=true] - Whether encryption is enabled
    */
   constructor(options = {}) {
-    if (!options.masterKey) {
+    if (options.enabled && !options.masterKey) {
       throw new Error("Master key (PSK) is required for the security manager");
     }
 

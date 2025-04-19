@@ -3,7 +3,7 @@
  */
 
 const { expect } = require("chai");
-const SecurityManager = require("../../src/utils/security");
+const SecurityManager = require("../../src/core/security");
 
 describe("SecurityManager", () => {
   const testMasterKey = "this-is-a-test-master-key-12345";

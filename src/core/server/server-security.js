@@ -1,7 +1,7 @@
 /**
  * ServerSecurity - Manages encryption and security functions
  */
-const SecurityManager = require("../../utils/security");
+const SecurityManager = require("../../core/security");
 
 class ServerSecurity {
   /**
