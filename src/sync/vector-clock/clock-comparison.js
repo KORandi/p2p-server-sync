@@ -78,6 +78,42 @@ class ClockComparison {
   }
 
   /**
+   * Check if this clock is causally before another
+   * @param {Object} otherClock - Clock to compare with
+   * @returns {boolean} True if this clock is before the other
+   */
+  isBefore(otherClock) {
+    return this.compare(otherClock) === -1;
+  }
+
+  /**
+   * Check if this clock is causally after another
+   * @param {Object} otherClock - Clock to compare with
+   * @returns {boolean} True if this clock is after the other
+   */
+  isAfter(otherClock) {
+    return this.compare(otherClock) === 1;
+  }
+
+  /**
+   * Check if this clock is concurrent with another (conflict)
+   * @param {Object} otherClock - Clock to compare with
+   * @returns {boolean} True if this clock is concurrent with the other
+   */
+  isConcurrent(otherClock) {
+    return this.compare(otherClock) === 0;
+  }
+
+  /**
+   * Check if this clock is identical to another
+   * @param {Object} otherClock - Clock to compare with
+   * @returns {boolean} True if this clock is identical to the other
+   */
+  isIdentical(otherClock) {
+    return this.compare(otherClock) === 2;
+  }
+
+  /**
    * Compare vector clocks to see if one dominates the other
    * @param {Object} otherClock - Clock to compare with
    * @returns {string} Relationship: 'dominates', 'dominated', 'concurrent', or 'identical'
