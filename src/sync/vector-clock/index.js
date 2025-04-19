@@ -64,55 +64,6 @@ class VectorClock {
   }
 
   /**
-   * Compare two vector clocks to determine their relationship
-   * @param {VectorClock|Object} otherClock - Clock to compare with
-   * @returns {number} Comparison result:
-   *  -1: this clock is causally BEFORE other clock
-   *   0: this clock is CONCURRENT with other clock
-   *   1: this clock is causally AFTER other clock
-   *   2: this clock is IDENTICAL to other clock
-   */
-  compare(otherClock) {
-    return this.comparison.compare(otherClock);
-  }
-
-  /**
-   * Check if this clock is causally before another
-   * @param {VectorClock|Object} otherClock - Clock to compare with
-   * @returns {boolean} True if this clock is before the other
-   */
-  isBefore(otherClock) {
-    return this.comparison.isBefore(otherClock);
-  }
-
-  /**
-   * Check if this clock is causally after another
-   * @param {VectorClock|Object} otherClock - Clock to compare with
-   * @returns {boolean} True if this clock is after the other
-   */
-  isAfter(otherClock) {
-    return this.comparison.isAfter(otherClock);
-  }
-
-  /**
-   * Check if this clock is concurrent with another (conflict)
-   * @param {VectorClock|Object} otherClock - Clock to compare with
-   * @returns {boolean} True if this clock is concurrent with the other
-   */
-  isConcurrent(otherClock) {
-    return this.comparison.isConcurrent(otherClock);
-  }
-
-  /**
-   * Check if this clock is identical to another
-   * @param {VectorClock|Object} otherClock - Clock to compare with
-   * @returns {boolean} True if this clock is identical to the other
-   */
-  isIdentical(otherClock) {
-    return this.comparison.isIdentical(otherClock);
-  }
-
-  /**
    * Convert to JSON-serializable object
    * @returns {Object} Clock as plain object
    */
@@ -156,15 +107,6 @@ class VectorClock {
    */
   deterministicWinner(otherClock, thisId, otherId) {
     return this.comparison.deterministicWinner(otherClock, thisId, otherId);
-  }
-
-  /**
-   * Compute a hash-based value that is consistent across the network
-   * (Alternative tiebreaker method for concurrent updates)
-   * @returns {number} Hash code
-   */
-  hashCode() {
-    return this.serializer.hashCode();
   }
 }
 

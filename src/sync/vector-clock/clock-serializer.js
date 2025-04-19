@@ -32,30 +32,6 @@ class ClockSerializer {
 
     return `[${entries}]`;
   }
-
-  /**
-   * Compute a hash-based value that is consistent across the network
-   * (Alternative tiebreaker method for concurrent updates)
-   * @returns {number} Hash code
-   */
-  hashCode() {
-    // Sort entries for deterministic ordering
-    const entries = Object.entries(this.vectorClock.clock).sort(
-      ([keyA], [keyB]) => keyA.localeCompare(keyB)
-    );
-
-    // Create a string representation
-    const str = entries.map(([key, value]) => `${key}:${value}`).join(",");
-
-    // Simple hash function
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return hash;
-  }
 }
 
 module.exports = ClockSerializer;
